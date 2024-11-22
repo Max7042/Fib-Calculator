@@ -1,9 +1,11 @@
+#include "Python.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 #include <d3d11.h>
 #include <tchar.h>
 #include <chrono>
+#include <string>
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -26,6 +28,52 @@ unsigned long long fibonacci_recursive(int n) {
     }
     return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2); // Recursive calls
 }
+
+unsigned long long fibonacci_python(int n) {
+    // Initialize the Python interpreter
+    Py_Initialize();
+
+    // Create a Python string to store the function to call
+    std::string code = R"(
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+)";
+
+    // Execute the code to define the function
+    PyRun_SimpleString(code.c_str());
+
+    // Get the Fibonacci function
+    PyObject* pName = PyUnicode_DecodeFSDefault("fibonacci");
+    PyObject* pFunc = PyObject_GetAttrString(PyImport_AddModule("__main__"), "fibonacci");
+
+    if (pFunc && PyCallable_Check(pFunc)) {
+        // Call the Python function with the argument 'n'
+        PyObject* pArgs = PyTuple_Pack(1, PyLong_FromLong(n));
+        PyObject* pValue = PyObject_CallObject(pFunc, pArgs);
+
+        if (pValue != NULL) {
+            unsigned long long result = PyLong_AsUnsignedLongLong(pValue);
+            Py_XDECREF(pArgs);
+            Py_XDECREF(pValue);
+            Py_Finalize();
+            return result;
+        }
+        else {
+            Py_XDECREF(pArgs);
+            Py_XDECREF(pFunc);
+            Py_Finalize();
+            return -1; // Return error if Python call failed
+        }
+    }
+    else {
+        Py_XDECREF(pFunc);
+        Py_Finalize();
+        return -1; // Return error if function was not found or callable
+    }
+}
+
 
 // Main code
 int main(int, char**)
@@ -112,39 +160,75 @@ int main(int, char**)
         {
             static float f = 0.0f;
             static int counter = 0;
-            static unsigned long long result = 0;
-            static int selectedNumber = 1;
-            static bool calculated = false;
-            static std::chrono::steady_clock::time_point start_time;
-            static std::chrono::steady_clock::time_point end_time;
-            static float elapsedTime = 0.0f;
+            static unsigned long long cppresult = 0;
+            static unsigned long long pyresult = 0;
+            static int cppselectedNumber = 1;
+            static int pyselectedNumber = 1;
+            static bool cppcalculated = false;
+            static bool pycalculated = false;
+            static std::chrono::steady_clock::time_point cppstart_time;
+            static std::chrono::steady_clock::time_point cppend_time;
+            static std::chrono::steady_clock::time_point pystart_time;
+            static std::chrono::steady_clock::time_point pyend_time;
+            static float cppelapsedTime = 0.0f;
+            static float pyelapsedTime = 0.0f;
 
-            ImGui::Begin("Fib Calculator");                            // Start the GUI     
+            ImGui::Begin("Fib C++ Calculator");                            // Start the GUI     
             ImGui::Text("Fibbanacci Sequence Calculator");             // Plain text  
-            ImGui::SliderInt("Pick a number", &selectedNumber, 1, 45); // Display Slider to pick a number            
+            ImGui::SliderInt("Pick a number", &cppselectedNumber, 1, 45); // Display Slider to pick a number            
 
             if (ImGui::Button("Calculate")) {
                 
-                start_time = std::chrono::steady_clock::now();         // Start the timer when the button is clicked
+                cppstart_time = std::chrono::steady_clock::now();         // Start the timer when the button is clicked
 
-                result = fibonacci_recursive(selectedNumber);          // Calculate the Fibonacci number using the recursive function
+                cppresult = fibonacci_recursive(cppselectedNumber);          // Calculate the Fibonacci number using the recursive function
 
-                calculated = true;                                     // Mark the calculation as completed
+                cppcalculated = true;                                     // Mark the calculation as completed
                 
-                end_time = std::chrono::steady_clock::now();           // Stop the timer after the calculation
+                cppend_time = std::chrono::steady_clock::now();           // Stop the timer after the calculation
 
-                std::chrono::duration<float> duration = end_time - start_time; // Calculate the elapsed time in seconds (floating-point seconds)
-                elapsedTime = duration.count();
+                std::chrono::duration<float> duration = cppend_time - cppstart_time; // Calculate the elapsed time in seconds (floating-point seconds)
+                cppelapsedTime = duration.count();
             }
                 
-            if (calculated) {
-                ImGui::Text("Fibonacci(%d) = %llu", selectedNumber, result); // If the result has been calculated, display it
-                ImGui::Text("Time taken: %.6f seconds", elapsedTime); // Display the time taken
+            if (cppcalculated) {
+                ImGui::Text("Fibonacci(%d) = %llu", cppselectedNumber, cppresult); // If the result has been calculated, display it
+                ImGui::Text("Time taken: %.6f seconds", cppelapsedTime); // Display the time taken
             }                           
             
+
+            ImGui::Begin("Fib Python Calculator");                            // Start the GUI     
+            ImGui::Text("Fibbanacci Sequence Calculator");             // Plain text  
+            ImGui::SliderInt("Pick a number", &pyselectedNumber, 1, 45); // Display Slider to pick a number            
+
+            if (ImGui::Button("Calculate")) {
+
+                pystart_time = std::chrono::steady_clock::now();         // Start the timer when the button is clicked
+
+                pyresult = fibonacci_python(pyselectedNumber);          // Calculate the Fibonacci number using the recursive function
+
+                pycalculated = true;                                     // Mark the calculation as completed
+
+                pyend_time = std::chrono::steady_clock::now();           // Stop the timer after the calculation
+
+                std::chrono::duration<float> duration = pyend_time - pystart_time; // Calculate the elapsed time in seconds (floating-point seconds)
+                pyelapsedTime = duration.count();
+            }
+
+            if (pycalculated) {
+                ImGui::Text("Fibonacci(%d) = %llu", pyselectedNumber, pyresult); // If the result has been calculated, display it
+                ImGui::Text("Time taken: %.6f seconds", pyelapsedTime); // Display the time taken
+            }
+
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
+
         }
+
+            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+            ImGui::End();
+
+
         // 1. Our code ends here
 
         // Rendering
